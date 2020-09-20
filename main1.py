@@ -68,10 +68,11 @@ def rasterize1():
   # Make a list of counties that are too small to show up in image.
   with open(tag+'_small_counties.txt', 'w') as f:
     for i, geoid, name in zip(range(len(counties)), data['GEOID'], data['NAME']):
-      g = np.where(image == i)[0]
-      if len(g) == 0:
-        data2 = data.iloc[i]
-        geom = data2['geometry']
+      indices = np.where(image == i)[0]
+      # Check for counties covering zero pixels
+      if len(indices) == 0:
+        # Rasterize that county individually, touching more pixels
+        geom = (data.iloc[i])['geometry']
         image2 = rasterio.features.rasterize(((geom, 1)), all_touched=True,
             out_shape=(height,width), transform=transform, fill=0)
         print(i, geoid, name, np.sum(image2))
@@ -102,7 +103,7 @@ def foo2():
 
 if __name__ == "__main__":
   #investigate1()
-  #rasterize1()
-  foo2()
+  rasterize1()
+  #foo2()
 
 
