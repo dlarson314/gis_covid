@@ -122,7 +122,7 @@ def resize_font(font, width):
     h = font.shape[0]
     w = font.shape[1] 
 
-    height = (h * width) / w
+    height = int((h * width) / w)
     # print h, w
     #print height, width
 
