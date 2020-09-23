@@ -1,6 +1,7 @@
 import copy
 import random
 
+import csv
 from attrdict import AttrDict
 import numpy as np
 import matplotlib.pyplot as mpl
@@ -38,7 +39,8 @@ def rasterize1():
   west, south, east, north = data.total_bounds
   latitude = 0.5 * (north + south)
 
-  width = 512
+  #width = 512
+  width = 1024 
   width_degrees = east - west
   height_degrees = north - south
   degrees_per_pixel_lon = width_degrees/width
@@ -81,29 +83,104 @@ def rasterize1():
         f.write('%d,%s,%s,%s\n' % (i, geoid, name, ' '.join(['%d' % x for x in indices])))
 
 
-def foo2():
-  width = 512
-  #width = 1024
-  tag = 'contiguous48_%d' % width
-  image = np.load(tag+'.npy')
-  print(image.shape, image.dtype)
+def get_weights(image):
+  hist = np.bincount(image.ravel())
+  weights = np.zeros_like(hist, dtype='float32')
+  weights[hist > 0] = 1.0 / hist[hist > 0]
+  return weights
+
+def load_legend(tag):
+  # 0,21007,Ballard
   with open(tag+'_legend.txt') as f:
     lines = f.readlines()
   triples = [line.strip().split(',') for line in lines]
   assert(list(range(len(triples))) == [int(t[0]) for t in triples])
+  geoid_to_index = {int(t[1]): int(t[0]) for t in triples}
+  return triples, geoid_to_index
 
-  for i, geoid, name in triples:
-    i = int(i)
-    g = np.where(image == i)[0]
-    if len(g) == 0:
-      print(i, geoid, name)
+def load_small_counties(tag):
+  with open(tag+'_small_counties.txt') as f:
+    lines = f.readlines()
+  index_to_pixels = {}
+  for line in lines:
+    tokens = line.split(',')
+    index = int(tokens[0])
+    geoid = int(tokens[1])
+    pixel_indices = [int(t) for t in tokens[3].split()]
+    index_to_pixels[index] = pixel_indices
+  return index_to_pixels
+
+
+def animate1():
+  #width = 512
+  width = 1024
+  tag = 'contiguous48_%d' % width
+
+  triples, geoid_to_index = load_legend(tag)
+  index_to_pixels = load_small_counties(tag)
+  image = np.load(tag+'.npy')
+  print(image.shape, image.dtype)
+  print(np.amax(image))
+  weights = get_weights(image)
+  print(weights.shape, weights.dtype)
+  print(weights)
+  filename='COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv'
+  index_to_row = {}
+  with open(filename, newline='') as csvfile:
+    reader = csv.reader(csvfile)
+    header = reader.__next__()
+    for row in reader:
+      if row[0][0:3] != '840':   # US country code?
+        continue
+      geoid = int(row[0][3:])
+      if geoid in geoid_to_index:
+        index = geoid_to_index[geoid]
+        index_to_row[index] = row
+      else:
+        print('  not found', row[10])
+
+  keys = list(index_to_row.keys())
+  keys.sort()
+  print(len(keys))
+  print(set(range(len(keys))) - set(keys))
+
+  vmax = 25
+  case_array = np.array([[int(x) for x in index_to_row[i][11:]] for i in range(len(keys))])
+  # Put a column of zeros at the start of case_array
+  case_array = np.hstack((np.zeros((len(keys),7)), case_array))
+  diffs = (case_array[:,7:] - case_array[:,:-7]) / 7.0
+  print(case_array.shape, case_array.dtype)
+  print(diffs.shape, diffs.dtype)
+
+  days = header[11:]
+  print(days[0:10])
+  print(len(days))
+
+  orig_shape = image.shape
+  for d, day in enumerate(days):
+    # Add a zero at the end, for the filler index (the ocean)
+    new_cases = np.hstack((diffs[:,d], np.zeros((1,))))
+    new_cases[new_cases < 0] = 0
+    new_cases = new_cases * weights
+    new_cases[-1] = 0.5 * vmax # ocean
+    case_image = new_cases[image]
+    case_image = case_image.ravel()
+    for key in index_to_pixels:
+      indices = index_to_pixels[key]
+      case_image[indices] += new_cases[key] / len(indices)
+    case_image.shape = orig_shape
+    print(d, day, np.amax(case_image))
+
+    mpl.imsave('frames/frame%04d.png' % d, case_image, vmin=0, vmax=vmax)
+
+
 
 
 
 
 if __name__ == "__main__":
   #investigate1()
-  rasterize1()
-  #foo2()
+  #rasterize1()
+  animate1()
 
 
