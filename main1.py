@@ -43,7 +43,8 @@ def rasterize1():
   latitude = 0.5 * (north + south)
 
   #width = 512
-  width = 1024 
+  #width = 1024
+  width = 8192
   width_degrees = east - west
   height_degrees = north - south
   degrees_per_pixel_lon = width_degrees/width
@@ -288,10 +289,10 @@ def foo3():
 
 if __name__ == "__main__":
   #investigate1()
-  #rasterize1()
+  rasterize1()
   #animate1()
   #foo()
   #foo2()
-  foo3()
+  #foo3()
 
 
