@@ -6,7 +6,7 @@ Write a 16-bit png grayscale image of an array, scaled by some integer to fill
 the 16-bit range of values, for visualization.
 Set scale to some integer, or leave it as "None" for auto-scaling.
 """
-def write16bit(array_in, filename='test16.png', scale=None):
+def write16bit(filename, array_in, scale=None):
   assert(len(array_in.shape) == 2)
   assert(array_in.dtype == 'uint16')
   if scale is None:
@@ -51,7 +51,7 @@ def foo2():
   array = np.tile(array, (128,1))
   print(array.shape, array.dtype)
   print(array)
-  new_array, scale = write16bit(array, filename='test16.png')
+  new_array, scale = write16bit('test16.png', array)
   print(new_array)
   print(new_array // scale)
 

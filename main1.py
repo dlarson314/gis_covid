@@ -10,6 +10,7 @@ import geopandas as gpd
 import pandas
 
 import pixel as pix
+import png16
 
 
 def investigate1():
@@ -33,7 +34,7 @@ def investigate1():
   mpl.show()
 
 
-def rasterize1():
+def rasterize1(permute=True):
   filename = 'cb_2018_us_county_500k/cb_2018_us_county_500k.shp'
   data = gpd.read_file(filename)
   data = data.cx[-126:-66, 24:50]
@@ -44,7 +45,10 @@ def rasterize1():
 
   #width = 512
   #width = 1024
-  width = 8192
+  #width = 2048
+  width = 3840  # 4K TV resolution?
+  #width = 4096
+  #width = 8192
   width_degrees = east - west
   height_degrees = north - south
   degrees_per_pixel_lon = width_degrees/width
@@ -56,7 +60,11 @@ def rasterize1():
                                              degrees_per_pixel_lat)
   print(transform)
 
-  counties = [(geom, i) for i, geom in enumerate(data['geometry'])]
+  if permute:
+    new_indices = np.random.permutation(len(data['geometry']))
+  else:
+    new_indices = np.arange(len(data['geometry']))
+  counties = [(geom, new_indices[i]) for i, geom in enumerate(data['geometry'])]
   fill = len(counties)   # Fill with highest county index + 1
   image = rasterio.features.rasterize(counties,
                                       out_shape=(height,width),
@@ -64,16 +72,22 @@ def rasterize1():
                                       fill=fill)
   tag = 'contiguous48_%d' % width
   print(image.shape, image.dtype)
+  print('saving numpy')
   np.save(tag+'.npy', image)
+  print('saving png')
   mpl.imsave(tag+'.png', image)
+  print('saving 16 bit grayscale png')
+  png16.write16bit(tag+'_16bit.png', image)
 
+  print('writing legend')
   with open(tag+'_legend.txt', 'w') as f:
     for i, geoid, name in zip(range(len(counties)), data['GEOID'], data['NAME']):
-      f.write('%d,%s,%s\n' % (i, geoid, name))
+      f.write('%d,%s,%s\n' % (new_indices[i], geoid, name))
 
   # Make a list of counties that are too small to show up in image.
+  print('checking for small counties')
   with open(tag+'_small_counties.txt', 'w') as f:
-    for i, geoid, name in zip(range(len(counties)), data['GEOID'], data['NAME']):
+    for i, geoid, name in zip(new_indices, data['GEOID'], data['NAME']):
       indices = np.where(image == i)[0]
       # Check for counties covering zero pixels
       if len(indices) == 0:
