@@ -34,7 +34,7 @@ def investigate1():
   mpl.show()
 
 
-def rasterize1(permute=True):
+def rasterize1(permute=True, seed=123456789):
   filename = 'cb_2018_us_county_500k/cb_2018_us_county_500k.shp'
   data = gpd.read_file(filename)
   data = data.cx[-126:-66, 24:50]
@@ -61,10 +61,16 @@ def rasterize1(permute=True):
   print(transform)
 
   if permute:
-    new_indices = np.random.permutation(len(data['geometry']))
+    generator = np.random.default_rng(seed)
+    new_indices = generator.permutation(len(data['geometry']))
   else:
     new_indices = np.arange(len(data['geometry']))
-  counties = [(geom, new_indices[i]) for i, geom in enumerate(data['geometry'])]
+
+  tuples = list(zip(new_indices, data['GEOID'], data['NAME'], data['geometry']))
+  tuples.sort()
+  print(tuples[0:10])
+
+  counties = list([(t[3], t[0]) for t in tuples])
   fill = len(counties)   # Fill with highest county index + 1
   image = rasterio.features.rasterize(counties,
                                       out_shape=(height,width),
@@ -81,24 +87,35 @@ def rasterize1(permute=True):
 
   print('writing legend')
   with open(tag+'_legend.txt', 'w') as f:
-    for i, geoid, name in zip(range(len(counties)), data['GEOID'], data['NAME']):
-      f.write('%d,%s,%s\n' % (new_indices[i], geoid, name))
+    #for i, geoid, name in zip(range(len(counties)), data['GEOID'], data['NAME']):
+    f.write('"pixel_value","geoid","county_name"\n')
+    for t in tuples:
+      f.write('%d,"%s","%s"\n' % (t[0], t[1], t[2]))
 
   # Make a list of counties that are too small to show up in image.
   print('checking for small counties')
+  found = set(np.unique(image))
+  desired = set(range(len(counties)))
+  missing = list(desired - found)
+  missing.sort()
+  print(missing)
+
   with open(tag+'_small_counties.txt', 'w') as f:
-    for i, geoid, name in zip(new_indices, data['GEOID'], data['NAME']):
-      indices = np.where(image == i)[0]
+    for m in missing:
+      t = tuples[m]
+      dummy, geoid, name, geom = t
+      assert(dummy == m)
+      indices = np.where(image == m)[0]
       # Check for counties covering zero pixels
       if len(indices) == 0:
         # Rasterize that county individually, touching more pixels
-        geom = (data.iloc[i])['geometry']
+        geom = t[3]
         image2 = rasterio.features.rasterize(((geom, 1)), all_touched=True,
             out_shape=(height,width), transform=transform, fill=0)
-        print(i, geoid, name, np.sum(image2))
+        print(m, geoid, name, np.sum(image2))
         image2 = image2.ravel()
         indices = np.where(image2 == 1)[0]
-        f.write('%d,%s,%s,%s\n' % (i, geoid, name, ' '.join(['%d' % x for x in indices])))
+        f.write('%d,%s,%s,%s\n' % (m, geoid, name, ' '.join(['%d' % x for x in indices])))
 
 
 def get_weights(image):
@@ -299,14 +316,99 @@ def foo3():
     mpl.imsave('frames/graph%04d.png' % i, image)
 
 
+def foo4():
+  width = 3840
+  tag = 'contiguous48_%d' % width
+  filename = tag+'_legend.txt'
+  legend = pandas.read_csv(filename)
+  print(legend)
+
+  filename='COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv'
+  data = pandas.read_csv(filename)
+  data['geoid'] = data['FIPS'].fillna(0).astype(np.int64)
+  print(data)
+  combined = legend.merge(data, on='geoid')
+  print(combined)
+  dates = data.columns[11:-1]
+  print(dates)
+  diff = combined['pixel_value'] - np.arange(len(combined['pixel_value']))
+  assert(np.amax(np.abs(diff)) == 0)
+
+  tag = 'contiguous48_%d' % width
+  image = png16.read16bit(tag+'_16bit.png', auto_collapse=True)
+  print(np.amin(image), np.amax(image))
+
+  num_counties = len(combined['geoid'])
+  for date in dates:
+    values = np.zeros((num_counties + 1), dtype='float32')
+    values[0:num_counties] = combined[date]
+    cases = values[image]
+    print(date, cases.shape, cases.dtype)
+
+
+def animate2():
+  font = pix.load_6x4_font()
+  font = np.repeat(font, 16, axis=1)
+  font = np.repeat(font, 16, axis=2)
+
+  width = 3840
+  tag = 'contiguous48_%d' % width
+  filename = tag+'_legend.txt'
+  legend = pandas.read_csv(filename)
+  filename='COVID-19/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_US.csv'
+  data = pandas.read_csv(filename)
+  data['geoid'] = data['FIPS'].fillna(0).astype(np.int64)
+  combined = legend.merge(data, on='geoid')
+  dates = data.columns[11:-1]
+  diff = combined['pixel_value'] - np.arange(len(combined['pixel_value']))
+  assert(np.amax(np.abs(diff)) == 0)
+
+  tag = 'contiguous48_%d' % width
+  image = png16.read16bit(tag+'_16bit.png', auto_collapse=True)
+
+  num_counties = len(combined['geoid'])
+  weights = get_weights(image)[0:num_counties]
+
+  colormap = mpl.cm.get_cmap(name='magma')
+
+  ocean = np.where(image == num_counties)
+
+  for i, date in enumerate(dates):
+      #if (i > 200):
+      if (i > 7):
+        diff = (combined[date] - combined[dates[i-7]]) / 7.0
+      else:
+        diff = combined[date] / 7.0
+      total_cases = np.sum(diff)
+      values = np.zeros((num_counties + 1), dtype='float32')
+      values[0:num_counties] = diff * weights
+      peak = np.amax(values)
+      values = values / np.amax(values)
+      case_image = values[image]
+      rgba = colormap(case_image, bytes=True)
+      print(i, date, peak, total_cases)
+      rgba[ocean[0],ocean[1],0] = 0
+      rgba[ocean[0],ocean[1],1] = 0
+      rgba[ocean[0],ocean[1],2] = 127
+      strings = [date, '7-day avg cases: %.1f' % total_cases]
+      text = pix.stringlist_to_array(font, strings)
+      rgb = pix.add_to_rgb_image(rgba[:,:,0:3],
+                                 text,
+                                 rgba.shape[0] - text.shape[0] - 16,
+                                 16,
+                                 color=[255,255,255])
+
+      mpl.imsave('frames%d/frame%04d.png' % (width, i), rgb)
 
 
 if __name__ == "__main__":
   #investigate1()
-  rasterize1()
+  #rasterize1()
   #animate1()
   #foo()
   #foo2()
   #foo3()
+  #foo4()
+  animate2()
 
 
