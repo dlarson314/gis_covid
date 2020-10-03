@@ -19,15 +19,20 @@ For example from Johns Hopkins University:
 git clone https://github.com/CSSEGISandData/COVID-19.git
 ```
 
-## Decide that animated gifs are a reasonable approach to animation
+## Animate
 
-This requires creating individual frames, and using imagemagick to combine them
-into an animated gif.  For example:
+This code creates individual frames, which can be assembled into a movie.
+
+One option is imagemagick, to combine into an animated gif.
+For example:
 ```
 convert -delay 40 *.png animation.gif
 ```
+It may be necessary to reduce the size of some images before doing this.
 For details see: https://imagemagick.org/index.php
 
+Another option is to open an image sequence in QuickTime and save as a movie, if
+using a mac.
 
 
 
