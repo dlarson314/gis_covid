@@ -193,6 +193,10 @@ def animate2():
 
   ocean = np.where(image == num_counties)
 
+  hist_height = 128
+
+  history = [0]
+  hist_expand = int((width + hist_height) / len(dates)) - 1
   for i, date in enumerate(dates):
       #if (i > 250):
       if (i > 7):
@@ -200,6 +204,7 @@ def animate2():
       else:
         diff = combined[date] / 7.0
       total_cases = np.sum(diff)
+      history.append(total_cases)
       values = np.zeros((num_counties + 1), dtype='float32')
       values[0:num_counties] = diff * weights
       peak = np.amax(values)
@@ -207,15 +212,19 @@ def animate2():
       case_image = values[image]
       top_hist = np.sum(case_image, axis=0)
       side_hist = np.sum(case_image, axis=1)
-      print(top_hist.shape, top_hist.dtype, np.amax(top_hist))
-      print(side_hist.shape, side_hist.dtype, np.amax(side_hist))
+      #print(top_hist.shape, top_hist.dtype, np.amax(top_hist))
+      #print(side_hist.shape, side_hist.dtype, np.amax(side_hist))
 
-      hist_height = 256
       color=(127,127,127)
       hist_image_top = graph_histogram(top_hist, hist_height, color=color)
       hist_image_side = graph_histogram(side_hist, hist_height, color=color)
       hist_image_side = np.transpose(hist_image_side, axes=(1,0,2))
       hist_image_side = hist_image_side[:,::-1,:]
+
+      history_image = graph_histogram(history, hist_height, color=(127,0,0))
+      history_image = np.repeat(history_image, hist_expand, axis=1)
+      row0 = np.zeros((hist_height, width + hist_height, 3), dtype='uint8')
+      row0[:,0:history_image.shape[1],:] = history_image
 
       corner = np.zeros((hist_height, hist_height, 3), dtype='uint8')
 
@@ -233,9 +242,9 @@ def animate2():
                                  font_scale,
                                  color=[255,255,255])
 
-      row0 = np.hstack((hist_image_top, corner))
-      row1 = np.hstack((rgb, hist_image_side))
-      rgb = np.vstack((row0, row1))
+      row1 = np.hstack((hist_image_top, corner))
+      row2 = np.hstack((rgb, hist_image_side))
+      rgb = np.vstack((row0, row1, row2))
 
       mpl.imsave('frames%d/frame%04d.png' % (width, i), rgb)
 
