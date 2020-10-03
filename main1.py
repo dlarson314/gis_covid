@@ -144,13 +144,34 @@ def load_small_counties(tag):
     index_to_pixels[index] = pixel_indices
   return index_to_pixels
 
-def animate2():
-  font = pix.load_6x4_font()
-  font = np.repeat(font, 16, axis=1)
-  font = np.repeat(font, 16, axis=2)
+def graph_histogram(hist, height, color=(255,255,255), peak=None):
+  width = len(hist)
+  if peak is None:
+    peak = np.amax(hist)
+  if peak == 0:
+    peak = 1
+  def to_row(count):
+    if count < 0:
+      count = 0
+    row = height - int(height * count / peak)
+    return row
 
+  image = np.zeros((height, width, 3), dtype='uint8')
+  for col in range(len(hist)):
+    row = to_row(hist[col])
+    for c in range(3):
+      image[row:,col,c] = color[c]
+  return image
+
+def animate2():
   #width = 3840
   width = 2048
+
+  font = pix.load_6x4_font()
+  font_scale = width // 256
+  font = np.repeat(font, font_scale, axis=1)
+  font = np.repeat(font, font_scale, axis=2)
+
   tag = 'contiguous48_%d' % width
   filename = tag+'_legend.txt'
   legend = pandas.read_csv(filename)
@@ -173,7 +194,7 @@ def animate2():
   ocean = np.where(image == num_counties)
 
   for i, date in enumerate(dates):
-    if (i > 250):
+      #if (i > 250):
       if (i > 7):
         diff = (combined[date] - combined[dates[i-7]]) / 7.0
       else:
@@ -182,8 +203,23 @@ def animate2():
       values = np.zeros((num_counties + 1), dtype='float32')
       values[0:num_counties] = diff * weights
       peak = np.amax(values)
-      values = values / np.amax(values)
+      # values = values / np.amax(values)
       case_image = values[image]
+      top_hist = np.sum(case_image, axis=0)
+      side_hist = np.sum(case_image, axis=1)
+      print(top_hist.shape, top_hist.dtype, np.amax(top_hist))
+      print(side_hist.shape, side_hist.dtype, np.amax(side_hist))
+
+      hist_height = 256
+      color=(127,127,127)
+      hist_image_top = graph_histogram(top_hist, hist_height, color=color)
+      hist_image_side = graph_histogram(side_hist, hist_height, color=color)
+      hist_image_side = np.transpose(hist_image_side, axes=(1,0,2))
+      hist_image_side = hist_image_side[:,::-1,:]
+
+      corner = np.zeros((hist_height, hist_height, 3), dtype='uint8')
+
+      case_image = case_image / peak
       rgba = colormap(case_image, bytes=True)
       print(i, date, peak, total_cases)
       rgba[ocean[0],ocean[1],0] = 0
@@ -193,9 +229,13 @@ def animate2():
       text = pix.stringlist_to_array(font, strings)
       rgb = pix.add_to_rgb_image(rgba[:,:,0:3],
                                  text,
-                                 rgba.shape[0] - text.shape[0] - 16,
-                                 16,
+                                 rgba.shape[0] - text.shape[0] - font_scale,
+                                 font_scale,
                                  color=[255,255,255])
+
+      row0 = np.hstack((hist_image_top, corner))
+      row1 = np.hstack((rgb, hist_image_side))
+      rgb = np.vstack((row0, row1))
 
       mpl.imsave('frames%d/frame%04d.png' % (width, i), rgb)
 
