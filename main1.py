@@ -198,13 +198,13 @@ def animate2():
   history = [0]
   hist_expand = int((width + hist_height) / len(dates)) - 1
   for i, date in enumerate(dates):
-      #if (i > 250):
-      if (i > 7):
-        diff = (combined[date] - combined[dates[i-7]]) / 7.0
-      else:
-        diff = combined[date] / 7.0
-      total_cases = np.sum(diff)
-      history.append(total_cases)
+    if (i > 7):
+      diff = (combined[date] - combined[dates[i-7]]) / 7.0
+    else:
+      diff = combined[date] / 7.0
+    total_cases = np.sum(diff)
+    history.append(total_cases)
+    if (i > 0):
       values = np.zeros((num_counties + 1), dtype='float32')
       values[0:num_counties] = diff * weights
       peak = np.amax(values)
